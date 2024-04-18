@@ -64,8 +64,28 @@ jobs:
       - name: Print config file
         run: cat ~/.kube/config
 
-      - name: Login to ECR
-        run: kubectl create secret docker-registry regcreds --docker-server=${{ secrets.REGISTRY }} --docker-username=AWS  --docker-password=$(aws ecr get-login-password) 
+      - name: Check if secret exists
+        id: check_secret
+        run: |
+          if kubectl get secret regcreds >/dev/null 2>&1; then
+            echo "::set-output name=secret_exists::true"
+          else
+            echo "::set-output name=secret_exists::false"
+          fi
+
+      - name: Set up Docker Registry Credentials
+        if: steps.check_secret.outputs.secret_exists != 'true'
+        run: |
+          kubectl create secret docker-registry regcreds \
+            --docker-server=${{ secrets.REGISTRY }} \
+            --docker-username=AWS \
+            --docker-password=$(aws ecr get-login-password)
+
+    - name: Skip creating Docker Registry Credentials
+      if: steps.check_secret.outputs.secret_exists == 'true'
+      run: |
+        echo "Secret regcreds already exists. Skipping creation."
+
 
       - name: Deploy Helm
         uses: bitovi/github-actions-deploy-eks-helm@v1.2.8
